@@ -1,0 +1,303 @@
+// Alpha Research AI — Prisma schema
+// SQLite is used as the local persistence layer (per environment constraint).
+// In production, the same schema maps cleanly to PostgreSQL by switching the
+// datasource provider and re-running `prisma migrate dev`.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Identity & billing
+// ---------------------------------------------------------------------------
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  name          String?
+  passwordHash  String?
+  image         String?
+  role          String   @default("user") // user | admin
+  plan          String   @default("free") // free | pro | institutional
+  creditsUsed   Int      @default(0)
+  creditsLimit  Int      @default(25)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  watchlists    Watchlist[]
+  portfolios    Portfolio[]
+  reports       ResearchReport[]
+  jobs          Job[]
+  sessions      Session[]
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token        String   @unique
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// Market data
+// ---------------------------------------------------------------------------
+
+model Company {
+  id            String   @id @default(cuid())
+  ticker        String   @unique
+  name          String
+  exchange      String   @default("NASDAQ")
+  sector        String?
+  industry      String?
+  logoUrl       String?
+  website       String?
+  description   String?
+  ceo           String?
+  employees     Int?
+  headquarters  String?
+  marketCap     Float?
+  peRatio       Float?
+  eps           Float?
+  dividendYield Float?
+  beta          Float?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  prices        StockPrice[]
+  financials    FinancialStatement[]
+  earnings      EarningsReport[]
+  filings       Filing[]
+  news          NewsItem[]
+  ratings       AIRating[]
+  reports       ResearchReport[]
+  watchlistRows WatchlistItem[]
+  portfolioRows PortfolioHolding[]
+}
+
+model StockPrice {
+  id        String   @id @default(cuid())
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  date      DateTime
+  open      Float
+  high      Float
+  low       Float
+  close     Float
+  volume    Float
+  change    Float?
+
+  @@unique([companyId, date])
+  @@index([companyId, date])
+}
+
+model FinancialStatement {
+  id           String   @id @default(cuid())
+  companyId    String
+  company      Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  period       String   // FY2024 | Q1-2025 ...
+  type         String   // income | balance | cashflow
+  revenue      Float?
+  grossProfit  Float?
+  operatingIncome Float?
+  netIncome    Float?
+  eps          Float?
+  totalAssets  Float?
+  totalLiabilities Float?
+  cash         Float?
+  debt         Float?
+  operatingCashFlow Float?
+  capex        Float?
+  freeCashFlow Float?
+  createdAt    DateTime @default(now())
+
+  @@index([companyId, period])
+}
+
+model EarningsReport {
+  id           String   @id @default(cuid())
+  companyId    String
+  company      Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  period       String
+  reportDate   DateTime
+  epsActual    Float?
+  epsExpected  Float?
+  revenueActual Float?
+  revenueExpected Float?
+  surprise     Float?
+  transcriptSummary String?
+  keyTakeaways String? // JSON-encoded list
+  guidance     String?
+  createdAt    DateTime @default(now())
+
+  @@index([companyId, reportDate])
+}
+
+model Filing {
+  id         String   @id @default(cuid())
+  companyId  String
+  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  type       String   // 10-K | 10-Q | 8-K | DEF 14A
+  period     String
+  filedAt    DateTime
+  url        String?
+  summary    String?
+  risks      String? // JSON-encoded list
+  sentiment  String? // positive | neutral | negative
+  createdAt  DateTime @default(now())
+
+  @@index([companyId, filedAt])
+}
+
+model NewsItem {
+  id         String   @id @default(cuid())
+  companyId  String
+  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  headline   String
+  summary    String?
+  url        String?
+  source     String?
+  sentiment  String? // positive | neutral | negative
+  sentimentScore Float?
+  publishedAt DateTime
+  createdAt  DateTime @default(now())
+
+  @@index([companyId, publishedAt])
+}
+
+// ---------------------------------------------------------------------------
+// AI output
+// ---------------------------------------------------------------------------
+
+model AIRating {
+  id            String   @id @default(cuid())
+  companyId     String
+  company       Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  rating        String   // strong_buy | buy | hold | sell | strong_sell
+  score         Int      // 0-100
+  confidence    Int      // 0-100
+  valuation     Int?
+  growth        Int?
+  profitability Int?
+  health        Int?
+  momentum      Int?
+  bullCase      String?
+  bearCase      String?
+  thesis        String?
+  risks         String? // JSON-encoded list
+  summary       String?
+  generatedAt   DateTime @default(now())
+
+  @@index([companyId, generatedAt])
+}
+
+model ResearchReport {
+  id           String   @id @default(cuid())
+  companyId    String
+  company      Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  userId       String?
+  user         User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  title        String
+  type         String   // analyst | earnings | thesis | risk
+  content      String   // markdown
+  rating       String?
+  priceTarget  Float?
+  summary      String?
+  status       String   @default("published") // draft | published | archived
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([companyId, createdAt])
+  @@index([userId])
+}
+
+// ---------------------------------------------------------------------------
+// User content
+// ---------------------------------------------------------------------------
+
+model Watchlist {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  createdAt DateTime @default(now())
+
+  items     WatchlistItem[]
+
+  @@index([userId])
+}
+
+model WatchlistItem {
+  id           String   @id @default(cuid())
+  watchlistId  String
+  watchlist    Watchlist @relation(fields: [watchlistId], references: [id], onDelete: Cascade)
+  companyId    String
+  company      Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  addedAt      DateTime @default(now())
+
+  @@unique([watchlistId, companyId])
+}
+
+model Portfolio {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  createdAt DateTime @default(now())
+
+  holdings  PortfolioHolding[]
+
+  @@index([userId])
+}
+
+model PortfolioHolding {
+  id          String   @id @default(cuid())
+  portfolioId String
+  portfolio   Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  shares      Float
+  avgCost     Float
+  addedAt     DateTime @default(now())
+
+  @@unique([portfolioId, companyId])
+}
+
+// ---------------------------------------------------------------------------
+// Background jobs / scheduler
+// ---------------------------------------------------------------------------
+
+model Job {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  type      String   // collect_prices | collect_filings | collect_news | generate_report | generate_rating
+  status    String   @default("queued") // queued | running | completed | failed
+  payload   String?  // JSON
+  result    String?  // JSON
+  error     String?
+  createdAt DateTime @default(now())
+  startedAt DateTime?
+  endedAt   DateTime?
+
+  @@index([status, createdAt])
+  @@index([type])
+}
+
+model ScheduledTask {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  cron      String
+  enabled   Boolean  @default(true)
+  lastRunAt DateTime?
+  nextRunAt DateTime?
+  createdAt DateTime @default(now())
+}
