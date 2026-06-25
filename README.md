@@ -5,6 +5,7 @@
 [![CI](https://github.com/leemcchesneyclarkgmailcom/alpha-research-ai/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Made with Next.js](https://img.shields.io/badge/Next.js-16-black)](https://nextjs.org)
+[![Vercel Ready](https://img.shields.io/badge/Vercel-Ready-black)](https://vercel.com)
 
 ---
 
@@ -23,16 +24,25 @@ individual investors.
 - 🧠 **Autonomous AI research engine** — earnings summaries, SEC filing
   analysis, annual report summaries, investment theses, bull/bear cases,
   risk extraction, sentiment detection, full analyst reports.
+- 💬 **AI Chat Analyst** — conversational Q&A about any company, with
+  institutional-grade depth and company-specific context.
 - 📡 **Continuous data collection** — scheduled jobs for market prices,
-  financial statements, SEC filings, and company news.
-- 📊 **Bloomberg-style dashboard** — watchlists, portfolio tracking, stock
-  screener, AI ratings, research reports, earnings calendar, market movers,
-  news & sentiment.
-- 🔐 **Auth & subscriptions** — sign up / sign in, user profiles,
-  Free / Pro / Institutional plans with AI credit meters.
+  financial statements, SEC filings, company news, and insider transactions.
+- 📊 **Bloomberg-style dashboard** — watchlists, portfolio tracking with
+  analytics, stock screener, AI ratings, research reports, earnings calendar,
+  market movers, news & sentiment, sector dashboard, insider transactions.
+- 🔐 **Auth & subscriptions** — NextAuth.js with bcrypt password hashing,
+  JWT sessions (serverless-ready), Free / Pro / Institutional plans with
+  AI credit meters.
+- 🔔 **Price alerts** — user-defined price targets, rating changes, and
+  earnings alerts, checked every 5 minutes by Vercel Cron.
+- 📈 **Technical analysis** — SMA-20/50, RSI, MACD, Bollinger Bands,
+  52-week high/low, volume analysis, and automated trading signals.
+- 🔗 **Shareable reports** — generate public links for any research report,
+  valid for 90 days.
 - 🌗 **Dark / light mode**, fully responsive, accessibility-first.
-- ⚙️ **Autonomous operation** — the scheduler runs continuously, refreshing
-  data and publishing insights without manual intervention.
+- ⚙️ **Vercel-ready** — Vercel Cron for autonomous operation, DB-backed
+  cache and queue (no in-memory state), PostgreSQL support.
 
 ---
 
@@ -41,13 +51,10 @@ individual investors.
 | Layer | Technology |
 |------|------------|
 | Frontend | Next.js 16, React 19, TypeScript 5, Tailwind CSS 4, shadcn/ui, TanStack Query, Recharts, Framer Motion |
-| Backend | Next.js API Routes (REST), Prisma ORM, SQLite (dev) / PostgreSQL (prod), in-memory cache & queue (dev) / Redis & BullMQ (prod) |
-| AI | `z-ai-web-dev-sdk` (LLM completions with retry/backoff) |
-| Auth | Custom session model (swap for NextAuth.js in prod) |
-| Infra | Docker, docker-compose, GitHub Actions CI/CD |
-
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full system design
-and [docs/API.md](docs/API.md) for the REST surface.
+| Backend | Next.js API Routes (REST), Prisma ORM, SQLite (dev) / PostgreSQL (Vercel prod), DB-backed cache & queue |
+| AI | `z-ai-web-dev-sdk` (LLM completions with retry/backoff + chat) |
+| Auth | NextAuth.js v4 (JWT strategy, credentials provider, bcrypt hashing) |
+| Infra | Docker, docker-compose, GitHub Actions CI/CD, Vercel Cron |
 
 ---
 
@@ -56,7 +63,7 @@ and [docs/API.md](docs/API.md) for the REST surface.
 ### Prerequisites
 
 - Node.js ≥ 20 (or [Bun](https://bun.sh) ≥ 1.1 — recommended)
-- A database (SQLite for dev, PostgreSQL for prod)
+- A database (SQLite for dev, PostgreSQL for Vercel)
 
 ### Install & run locally
 
@@ -66,54 +73,57 @@ git clone https://github.com/leemcchesneyclarkgmailcom/alpha-research-ai.git
 cd alpha-research-ai
 
 # 2. Install dependencies
-bun install            # or: npm install / pnpm install
+bun install
 
 # 3. Configure environment
 cp .env.example .env
-# edit .env to match your environment
+# Edit .env — set NEXTAUTH_SECRET (required for auth):
+#   openssl rand -base64 32
 
-# 4. Push the database schema
+# 4. Push the database schema (auto-detects SQLite vs PostgreSQL from DATABASE_URL)
 bun run db:push
 
-# 5. Seed demo data (7 companies, prices, financials, filings, news, AI reports)
-bun run scripts/seed.ts
+# 5. Seed demo data (7 companies, prices, financials, filings, news, insiders, AI reports)
+bun run seed
 
 # 6. Start the dev server
 bun run dev
 ```
 
-Open <http://localhost:3000> in your browser. Use the **demo account** to
-explore the dashboard:
+Open <http://localhost:3000>. Use the **demo account**:
 
 ```
 email:    demo@alpha-research.ai
 password: demo
 ```
 
-### Production build
+### Vercel deployment
 
-```bash
-bun run build
-bun run start
-```
+1. **Import the repo** at <https://vercel.com/new>
+2. **Set environment variables** (Vercel → Settings → Environment Variables):
+   - `DATABASE_URL` — your Vercel Postgres / Neon / Supabase connection string
+   - `NEXTAUTH_SECRET` — `openssl rand -base64 32`
+   - `NEXTAUTH_URL` — `https://your-app.vercel.app`
+   - `CRON_SECRET` — `openssl rand -hex 32` (used to authenticate cron endpoints)
+3. **Deploy** — Vercel auto-detects Next.js, runs `bun run build`, and
+   deploys. The `vercel.json` cron schedules take effect immediately.
+4. **Push schema to production DB** — run once locally:
+   ```bash
+   DATABASE_URL="your-vercel-postgres-url" bun run db:push
+   ```
+5. **Seed production DB** (optional):
+   ```bash
+   DATABASE_URL="your-vercel-postgres-url" bun run seed
+   ```
 
----
-
-## 🐳 Docker
-
-```bash
-# Build and run the full stack (app + Postgres + Redis)
-docker compose up -d --build
-
-# Tail logs
-docker compose logs -f app
-```
-
-The compose file spins up:
-- `app` — the Next.js production server
-- `postgres` — PostgreSQL 16 database
-- `redis` — Redis 7 cache & queue backend
-- `worker` — background job processor
+The Vercel Cron jobs will automatically:
+- Process the job queue every minute
+- Collect market prices every 15 minutes
+- Ingest SEC filings hourly
+- Monitor company news every 30 minutes
+- Regenerate AI ratings daily at 9am
+- Publish analyst reports daily at 8am
+- Check user alerts every 5 minutes
 
 ---
 
@@ -122,41 +132,48 @@ The compose file spins up:
 ```
 alpha-research-ai/
 ├── docs/
-│   ├── ARCHITECTURE.md          # System design, data flow, components
-│   └── API.md                   # REST API reference
+│   ├── ARCHITECTURE.md
+│   └── API.md
 ├── prisma/
-│   └── schema.prisma            # Database schema (User, Company, Filing, Report, Job, …)
+│   └── schema.prisma            # 18 models — User, Company, Filing, Report, Job, Alert, Chat, Insider, ...
 ├── src/
 │   ├── app/
-│   │   ├── api/                 # REST endpoints (auth, companies, reports, jobs, AI, …)
-│   │   ├── layout.tsx           # Root layout with theme + auth + query providers
-│   │   └── page.tsx             # Bloomberg-style single-page dashboard
+│   │   ├── api/                 # 40+ REST endpoints
+│   │   │   ├── auth/[...nextauth]/  # NextAuth.js handler
+│   │   │   ├── auth/register/      # Registration with bcrypt
+│   │   │   ├── cron/               # Vercel Cron endpoints (7 schedules)
+│   │   │   ├── companies/          # CRUD + sub-resources
+│   │   │   ├── chat/               # AI Chat Analyst
+│   │   │   ├── compare/            # Side-by-side comparison
+│   │   │   ├── alerts/             # Price/rating/earnings alerts
+│   │   │   ├── technical/          # SMA, RSI, MACD, Bollinger
+│   │   │   ├── insiders/           # Insider transactions
+│   │   │   ├── sectors/            # Sector dashboard
+│   │   │   ├── portfolio/analytics/ # Sharpe, beta, diversification
+│   │   │   ├── share/              # Public report links
+│   │   │   └── ...
+│   │   ├── layout.tsx
+│   │   └── page.tsx               # Bloomberg-style single-page dashboard
 │   ├── components/
-│   │   ├── ui/                  # shadcn/ui primitives
-│   │   ├── charts/              # Price and score charts (Recharts)
-│   │   ├── views/               # Dashboard views (overview, watchlists, portfolio, …)
-│   │   ├── auth-provider.tsx    # Client auth context
-│   │   ├── auth-dialog.tsx      # Sign in / sign up modal
-│   │   ├── profile-dialog.tsx   # Profile + subscription management
-│   │   └── command-search.tsx   # ⌘K company search
+│   │   ├── ui/                    # shadcn/ui primitives
+│   │   ├── charts/                # Price and score charts
+│   │   ├── views/                 # 16 dashboard views
+│   │   ├── auth-provider.tsx      # NextAuth session provider
+│   │   └── ...
 │   └── lib/
-│       ├── ai-engine.ts         # LLM research primitives (thesis, bull/bear, risks, …)
-│       ├── collectors.ts        # Market data, filings, news ingestion
-│       ├── queue.ts             # In-memory cache + queue + scheduler
-│       ├── boot.ts              # Autonomous layer boot (registers handlers)
-│       ├── auth.ts              # Session resolution
-│       ├── db.ts                # Prisma client
-│       ├── format.ts            # Display formatters
-│       └── utils.ts             # Tailwind merge helpers
+│       ├── ai-engine.ts           # LLM research engine
+│       ├── auth-config.ts         # NextAuth config (credentials + JWT)
+│       ├── collectors.ts          # Market data, filings, news, insiders
+│       ├── queue.ts               # DB-backed cache + queue (serverless-safe)
+│       ├── boot.ts                # Job handlers + alert checker
+│       └── ...
 ├── scripts/
-│   └── seed.ts                  # Demo data seeder (companies, prices, AI reports)
-├── .github/
-│   ├── workflows/ci.yml         # Lint + type-check + build
-│   ├── ISSUE_TEMPLATE/          # Bug & feature templates
-│   └── PULL_REQUEST_TEMPLATE.md
-├── Dockerfile                   # Multi-stage production build
-├── docker-compose.yml           # Full stack deployment
-└── .env.example                 # Environment variable reference
+│   ├── seed.ts                   # Demo data seeder
+│   └── prisma-provider.ts        # Auto-switch SQLite ↔ PostgreSQL
+├── vercel.json                   # Vercel Cron schedules
+├── Dockerfile
+├── docker-compose.yml
+└── .env.example
 ```
 
 ---
@@ -180,56 +197,27 @@ serialized execution and exponential backoff to respect rate limits:
 | `generateAnalystReport(company)` | Full institutional-grade markdown report |
 | `persistAnalystReport(companyId)` | Saves report + rating to the database |
 
+The **AI Chat Analyst** (`POST /api/chat`) provides conversational Q&A with
+company-specific context — ask any question and get institutional-grade answers.
+
 ---
 
 ## ⚙️ Autonomous Pipeline
 
-A single `bootAutonomousLayer()` call (triggered on first API request) registers
-the following scheduled jobs:
+Vercel Cron drives the autonomous pipeline. The schedules are defined in
+[`vercel.json`](vercel.json):
 
-| Task | Cron | Job Type | Description |
-|------|------|----------|-------------|
-| `refresh-market-prices` | `*/15 * * * *` | `collect_prices` | Ingest 3 days of OHLCV bars |
-| `ingest-sec-filings` | `0 * * * *` | `collect_filings` | Pull latest 10-K / 10-Q / 8-K filings |
-| `monitor-company-news` | `*/30 * * * *` | `collect_news` | Pull latest news + sentiment |
-| `regenerate-ai-ratings` | `0 9 * * *` | `generate_rating` | Refresh top-3 AI ratings daily |
-| `publish-daily-reports` | `0 8 * * *` | `generate_report` | Publish one new analyst report |
+| Endpoint | Schedule | Job Type | Description |
+|----------|----------|----------|-------------|
+| `/api/cron/process-jobs` | `* * * * *` | (all) | Process queued jobs every minute |
+| `/api/cron/collect-prices` | `*/15 * * * *` | `collect_prices` | Ingest OHLCV bars |
+| `/api/cron/collect-filings` | `0 * * * *` | `collect_filings` | Pull latest SEC filings |
+| `/api/cron/collect-news` | `*/30 * * * *` | `collect_news` | Pull latest news + sentiment |
+| `/api/cron/generate-ratings` | `0 9 * * *` | `generate_rating` | Refresh top-3 AI ratings |
+| `/api/cron/generate-reports` | `0 8 * * *` | `generate_report` | Publish one analyst report |
+| `/api/cron/check-alerts` | `*/5 * * * *` | `check_alerts` | Check user price/rating alerts |
 
-The **Admin / Jobs** view in the dashboard exposes the live queue, lets you
-trigger the pipeline manually, and inspect cache stats.
-
----
-
-## 🧪 Testing
-
-```bash
-bun run lint           # ESLint
-bun run db:push        # Verify schema
-bun run scripts/seed.ts # Smoke-test the full pipeline
-```
-
-Automated test suites are wired into [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
-
----
-
-## 🚢 Deployment
-
-### Vercel (recommended for the Next.js app)
-
-1. Import the repo at <https://vercel.com/new>
-2. Set environment variables from `.env.example`
-3. Run `bun run db:push` once against your production database
-4. Deploy
-
-### Self-hosted with Docker
-
-```bash
-docker compose up -d --build
-```
-
-The compose file publishes the app on port 3000, Postgres on 5432, and Redis
-on 6379. Adjust the volume mounts and env vars in `docker-compose.yml` for
-your environment.
+Each cron endpoint is authenticated with `CRON_SECRET` to prevent abuse.
 
 ---
 
