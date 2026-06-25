@@ -256,6 +256,60 @@ export async function collectFinancials(args: { ticker?: string } = {}) {
   return { collected: results };
 }
 
+/**
+ * Collect insider transactions (mock data). Generates realistic buy/sell
+ * transactions for company insiders (CEO, CFO, directors, officers).
+ */
+export async function collectInsiders(args: { ticker?: string; limit?: number } = {}) {
+  const companies = args.ticker
+    ? await db.company.findMany({ where: { ticker: args.ticker } })
+    : await db.company.findMany();
+
+  const insiderNames = [
+    "Tim Cook", "Luca Maestri", "Jeff Williams", "Katherine Adams", "Satya Nadella",
+    "Amy Hood", "Brad Smith", "Jensen Huang", "Colette Kress", "Sundar Pichai",
+    "Ruth Porat", "Philipp Schindler", "Andy Jassy", "Brian Olsavsky", "Mark Zuckerberg",
+    "JavierOlivan", "Susan Li", "Elon Musk", "Vaibhav Taneja", "Vaibhav Taneja",
+  ];
+  const titles = ["CEO", "CFO", "COO", "Director", "VP", "Chief Legal Officer", "Chief Product Officer"];
+
+  const results: { ticker: string; insider: string }[] = [];
+
+  for (const company of companies) {
+    const rng = seededRandom(hashString(company.ticker) + Date.now() % 86_400_000);
+    const numTx = 2 + Math.floor(rng() * 4);
+    for (let i = 0; i < numTx; i++) {
+      const insider = insiderNames[Math.floor(rng() * insiderNames.length)];
+      const title = titles[Math.floor(rng() * titles.length)];
+      const type = rng() > 0.4 ? "sell" : "buy";
+      const shares = Math.round((1000 + rng() * 50000) / 100) * 100;
+      const price = (company.peRatio ?? 100) * (0.8 + rng() * 0.4);
+      const value = shares * price;
+      const filedAt = new Date(Date.now() - Math.floor(rng() * 30) * 86_400_000);
+
+      const exists = await db.insiderTransaction.findFirst({
+        where: { companyId: company.id, insider, filedAt, shares },
+      });
+      if (exists) continue;
+
+      await db.insiderTransaction.create({
+        data: {
+          companyId: company.id,
+          insider,
+          title,
+          type,
+          shares,
+          price: round2(price),
+          value: round2(value),
+          filedAt,
+        },
+      });
+      results.push({ ticker: company.ticker, insider });
+    }
+  }
+  return { collected: results };
+}
+
 function round2(n: number) {
   return Math.round(n * 100) / 100;
 }

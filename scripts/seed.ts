@@ -8,8 +8,9 @@
  */
 
 import { db } from "../src/lib/db";
-import { collectPrices, collectFilings, collectNews, collectFinancials } from "../src/lib/collectors";
+import { collectPrices, collectFilings, collectNews, collectFinancials, collectInsiders } from "../src/lib/collectors";
 import { persistAnalystReport } from "../src/lib/ai-engine";
+import bcrypt from "bcryptjs";
 
 const COMPANIES = [
   {
@@ -151,16 +152,17 @@ async function main() {
   }
 
   console.log("→ Seeding demo user, watchlist, portfolio…");
+  const demoPasswordHash = await bcrypt.hash("demo", 12);
   const user = await db.user.upsert({
     where: { email: "demo@alpha-research.ai" },
-    update: {},
+    update: { passwordHash: demoPasswordHash },
     create: {
       email: "demo@alpha-research.ai",
       name: "Demo Analyst",
       role: "admin",
       plan: "pro",
       creditsLimit: 250,
-      passwordHash: "demo-hash-not-for-production",
+      passwordHash: demoPasswordHash,
     },
   });
 
@@ -226,11 +228,12 @@ async function main() {
     }
   }
 
-  console.log("→ Collecting prices, financials, filings, news…");
+  console.log("→ Collecting prices, financials, filings, news, insiders…");
   await collectFinancials();
   await collectPrices({ days: 90 });
   await collectFilings();
   await collectNews({ limit: 3 });
+  await collectInsiders();
 
   console.log("→ Generating AI reports for top 3 companies (sequential, with retry)…");
   const top3 = await db.company.findMany({ take: 3, orderBy: { marketCap: "desc" } });
