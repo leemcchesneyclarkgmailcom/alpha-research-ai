@@ -1,7 +1,13 @@
 // Alpha Research AI — Prisma schema
-// SQLite is used as the local persistence layer (per environment constraint).
-// In production, the same schema maps cleanly to PostgreSQL by switching the
-// datasource provider and re-running `prisma migrate dev`.
+//
+// This schema works with BOTH SQLite (local dev) and PostgreSQL (Vercel prod).
+// The provider is set dynamically by scripts/prisma-provider.ts before any
+// prisma command runs. See package.json scripts: db:push, db:generate, etc.
+//
+// To use PostgreSQL (Vercel): set DATABASE_URL=postgresql://... and the
+// scripts/prisma-provider.ts helper will auto-detect and switch the provider.
+// To use SQLite (local dev): set DATABASE_URL=file:./db/custom.db and the
+// helper will switch to sqlite.
 
 generator client {
   provider = "prisma-client-js"
@@ -33,6 +39,8 @@ model User {
   portfolios    Portfolio[]
   reports       ResearchReport[]
   jobs          Job[]
+  conversations ChatConversation[]
+  alerts        Alert[]
   sessions      Session[]
 }
 
@@ -81,6 +89,8 @@ model Company {
   reports       ResearchReport[]
   watchlistRows WatchlistItem[]
   portfolioRows PortfolioHolding[]
+  insiders      InsiderTransaction[]
+  alerts        Alert[]
 }
 
 model StockPrice {
@@ -103,8 +113,8 @@ model FinancialStatement {
   id           String   @id @default(cuid())
   companyId    String
   company      Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  period       String   // FY2024 | Q1-2025 ...
-  type         String   // income | balance | cashflow
+  period       String
+  type         String
   revenue      Float?
   grossProfit  Float?
   operatingIncome Float?
@@ -134,7 +144,7 @@ model EarningsReport {
   revenueExpected Float?
   surprise     Float?
   transcriptSummary String?
-  keyTakeaways String? // JSON-encoded list
+  keyTakeaways String?
   guidance     String?
   createdAt    DateTime @default(now())
 
@@ -145,13 +155,13 @@ model Filing {
   id         String   @id @default(cuid())
   companyId  String
   company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  type       String   // 10-K | 10-Q | 8-K | DEF 14A
+  type       String
   period     String
   filedAt    DateTime
   url        String?
   summary    String?
-  risks      String? // JSON-encoded list
-  sentiment  String? // positive | neutral | negative
+  risks      String?
+  sentiment  String?
   createdAt  DateTime @default(now())
 
   @@index([companyId, filedAt])
@@ -165,7 +175,7 @@ model NewsItem {
   summary    String?
   url        String?
   source     String?
-  sentiment  String? // positive | neutral | negative
+  sentiment  String?
   sentimentScore Float?
   publishedAt DateTime
   createdAt  DateTime @default(now())
@@ -181,9 +191,9 @@ model AIRating {
   id            String   @id @default(cuid())
   companyId     String
   company       Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  rating        String   // strong_buy | buy | hold | sell | strong_sell
-  score         Int      // 0-100
-  confidence    Int      // 0-100
+  rating        String
+  score         Int
+  confidence    Int
   valuation     Int?
   growth        Int?
   profitability Int?
@@ -192,7 +202,7 @@ model AIRating {
   bullCase      String?
   bearCase      String?
   thesis        String?
-  risks         String? // JSON-encoded list
+  risks         String?
   summary       String?
   generatedAt   DateTime @default(now())
 
@@ -206,14 +216,16 @@ model ResearchReport {
   userId       String?
   user         User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
   title        String
-  type         String   // analyst | earnings | thesis | risk
-  content      String   // markdown
+  type         String
+  content      String
   rating       String?
   priceTarget  Float?
   summary      String?
-  status       String   @default("published") // draft | published | archived
+  status       String   @default("published")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  shares       SharedReport[]
 
   @@index([companyId, createdAt])
   @@index([userId])
@@ -279,10 +291,10 @@ model Job {
   id        String   @id @default(cuid())
   userId    String?
   user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  type      String   // collect_prices | collect_filings | collect_news | generate_report | generate_rating
-  status    String   @default("queued") // queued | running | completed | failed
-  payload   String?  // JSON
-  result    String?  // JSON
+  type      String
+  status    String   @default("queued")
+  payload   String?
+  result    String?
   error     String?
   createdAt DateTime @default(now())
   startedAt DateTime?
@@ -299,5 +311,100 @@ model ScheduledTask {
   enabled   Boolean  @default(true)
   lastRunAt DateTime?
   nextRunAt DateTime?
+  createdAt DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// DB-backed cache (serverless-safe, replaces in-memory Map)
+// ---------------------------------------------------------------------------
+
+model CacheEntry {
+  key       String   @id
+  value     String
+  expiresAt DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([expiresAt])
+}
+
+// ---------------------------------------------------------------------------
+// AI Chat Analyst — conversational Q&A per company
+// ---------------------------------------------------------------------------
+
+model ChatConversation {
+  id        String       @id @default(cuid())
+  userId    String
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyId String?
+  title     String       @default("New conversation")
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  messages  ChatMessage[]
+
+  @@index([userId, updatedAt])
+}
+
+model ChatMessage {
+  id              String           @id @default(cuid())
+  conversationId  String
+  conversation    ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role            String
+  content         String
+  createdAt       DateTime         @default(now())
+
+  @@index([conversationId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Insider transactions
+// ---------------------------------------------------------------------------
+
+model InsiderTransaction {
+  id        String   @id @default(cuid())
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  insider   String
+  title     String?
+  type      String
+  shares    Float
+  price     Float
+  value     Float
+  filedAt   DateTime
+  createdAt DateTime @default(now())
+
+  @@index([companyId, filedAt])
+}
+
+// ---------------------------------------------------------------------------
+// User alerts — price targets, rating changes, earnings
+// ---------------------------------------------------------------------------
+
+model Alert {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  type        String
+  threshold   Float?
+  active      Boolean  @default(true)
+  triggeredAt DateTime?
+  createdAt   DateTime @default(now())
+
+  @@index([userId, active])
+  @@index([companyId])
+}
+
+// ---------------------------------------------------------------------------
+// Shareable public report links
+// ---------------------------------------------------------------------------
+
+model SharedReport {
+  id        String   @id @default(cuid())
+  reportId  String
+  report    ResearchReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime?
   createdAt DateTime @default(now())
 }
