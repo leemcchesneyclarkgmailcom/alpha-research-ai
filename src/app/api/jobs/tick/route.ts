@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { ensureAutonomousBooted } from "@/lib/boot";
+import { ensureAutonomousBooted, processPendingJobs } from "@/lib/boot";
 import { collectPrices, collectFilings, collectNews } from "@/lib/collectors";
 
 /**
@@ -9,16 +9,17 @@ import { collectPrices, collectFilings, collectNews } from "@/lib/collectors";
  */
 export async function POST() {
   await ensureAutonomousBooted();
-  const [prices, filings, news] = await Promise.all([
+  const [prices, filings, news, jobsResult] = await Promise.all([
     collectPrices({ days: 2 }),
     collectFilings(),
     collectNews({ limit: 1 }),
+    processPendingJobs({ maxJobs: 10, timeBudgetMs: 45_000 }),
   ]);
   const tasks = await db.scheduledTask.findMany({ orderBy: { name: "asc" } });
   return NextResponse.json({
     ok: true,
     ranAt: new Date().toISOString(),
-    results: { prices, filings, news },
+    results: { prices, filings, news, jobs: jobsResult },
     tasks: tasks.map((t) => ({
       name: t.name,
       cron: t.cron,
