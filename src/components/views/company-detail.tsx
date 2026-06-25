@@ -276,6 +276,7 @@ export function CompanyDetailView({
         <TabsList className="flex w-full flex-wrap gap-1">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="ai">AI Analysis</TabsTrigger>
+          <TabsTrigger value="technical">Technical</TabsTrigger>
           <TabsTrigger value="financials">Financials</TabsTrigger>
           <TabsTrigger value="filings">Filings</TabsTrigger>
           <TabsTrigger value="earnings">Earnings</TabsTrigger>
@@ -437,6 +438,10 @@ export function CompanyDetailView({
               </CardContent>
             </Card>
           )}
+        </TabsContent>
+
+        <TabsContent value="technical" className="space-y-4">
+          <TechnicalPanel companyId={c.id} />
         </TabsContent>
 
         <TabsContent value="financials" className="space-y-4">
@@ -688,5 +693,106 @@ function ProfileRow({ label, value }: { label: string; value: React.ReactNode })
       <span className="text-muted-foreground">{label}</span>
       <span className="text-right font-medium">{value}</span>
     </div>
+  );
+}
+
+function TechnicalPanel({ companyId }: { companyId: string }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ["technical", companyId],
+    queryFn: async () => {
+      const res = await fetch(`/api/technical?companyId=${companyId}`);
+      return res.json() as Promise<{
+        indicators: {
+          price: number;
+          sma20: number;
+          sma50: number | null;
+          rsi: number;
+          macd: { macd: number; signal: number; histogram: number };
+          bollinger: { upper: number; middle: number; lower: number };
+          high52w: number;
+          low52w: number;
+          pctFrom52wHigh: number;
+          pctFrom52wLow: number;
+          avgVolume20: number;
+          latestVolume: number;
+          volumeRatio: number;
+        };
+        signals: { signal: string; strength: string }[];
+      }>;
+    },
+  });
+
+  if (isLoading) return <Skeleton className="h-96" />;
+  if (!data) return <div className="text-sm text-muted-foreground">No data</div>;
+
+  const i = data.indicators;
+  return (
+    <>
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <Stat label="SMA 20" value={`$${i.sma20.toFixed(2)}`} />
+        <Stat label="SMA 50" value={i.sma50 ? `$${i.sma50.toFixed(2)}` : "—"} />
+        <Stat label="RSI (14)" value={i.rsi.toFixed(1)} />
+        <Stat
+          label="MACD"
+          value={`${i.macd.macd.toFixed(2)}`}
+        />
+        <Stat label="52W High" value={`$${i.high52w.toFixed(2)}`} />
+        <Stat label="52W Low" value={`$${i.low52w.toFixed(2)}`} />
+        <Stat label="From 52W High" value={`${i.pctFrom52wHigh.toFixed(1)}%`} />
+        <Stat label="Vol Ratio" value={`${i.volumeRatio.toFixed(2)}x`} />
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Trading Signals</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {data.signals.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No active signals.</p>
+          ) : (
+            data.signals.map((s, idx) => (
+              <div key={idx} className="flex items-center gap-2 rounded-md border border-border p-2 text-sm">
+                <Badge
+                  variant="outline"
+                  className={
+                    s.strength === "strong"
+                      ? "border-primary/30 bg-primary/10 text-primary"
+                      : s.strength === "moderate"
+                        ? "border-amber-500/30 bg-amber-500/10 text-amber-500"
+                        : "text-muted-foreground"
+                  }
+                >
+                  {s.strength}
+                </Badge>
+                <span>{s.signal}</span>
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Bollinger Bands</CardTitle>
+          <CardDescription className="text-xs">20-period, 2 standard deviations</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-3 gap-3 text-center">
+            <div className="rounded-md border border-border p-3">
+              <div className="text-xs text-muted-foreground">Upper</div>
+              <div className="text-lg font-bold">${i.bollinger.upper.toFixed(2)}</div>
+            </div>
+            <div className="rounded-md border border-border p-3">
+              <div className="text-xs text-muted-foreground">Middle</div>
+              <div className="text-lg font-bold">${i.bollinger.middle.toFixed(2)}</div>
+            </div>
+            <div className="rounded-md border border-border p-3">
+              <div className="text-xs text-muted-foreground">Lower</div>
+              <div className="text-lg font-bold">${i.bollinger.lower.toFixed(2)}</div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </>
   );
 }

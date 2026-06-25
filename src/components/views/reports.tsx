@@ -14,9 +14,10 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { FileText, Sparkles, Clock } from "lucide-react";
+import { FileText, Sparkles, Clock, Share2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { fmtCurrency, fmtDateTime, ratingLabel, RATING_COLORS } from "@/lib/format";
+import { toast } from "sonner";
 
 interface Report {
   id: string;
@@ -204,6 +205,40 @@ function ReportDialog({
             <div className="text-sm text-muted-foreground">Loading…</div>
           )}
         </ScrollArea>
+        {report && (
+          <div className="flex items-center justify-between border-t border-border pt-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => window.print()}
+            >
+              <FileText className="mr-1.5 h-3.5 w-3.5" /> Export PDF
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                try {
+                  const res = await fetch("/api/share", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ reportId: report.id }),
+                  });
+                  if (res.ok) {
+                    const data = await res.json();
+                    const url = `${window.location.origin}/?share=${data.token}`;
+                    await navigator.clipboard.writeText(url);
+                    toast.success("Share link copied to clipboard!");
+                  }
+                } catch {
+                  toast.error("Failed to create share link");
+                }
+              }}
+            >
+              <Share2 className="mr-1.5 h-3.5 w-3.5" /> Share
+            </Button>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

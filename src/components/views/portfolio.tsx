@@ -28,6 +28,7 @@ import { Wallet, Plus, TrendingUp, TrendingDown } from "lucide-react";
 import { useAuthFetch } from "@/components/auth-provider";
 import { fmtCurrency, fmtPct, fmtCompact } from "@/lib/format";
 import { toast } from "sonner";
+import { Progress } from "@/components/ui/progress";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 
 interface Holding {
@@ -200,6 +201,9 @@ export function PortfolioView({ onOpenCompany }: { onOpenCompany: (id: string) =
             </Card>
           </div>
 
+          {/* Portfolio Analytics */}
+          <PortfolioAnalytics />
+
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
             <Card className="lg:col-span-2">
               <CardHeader>
@@ -357,6 +361,129 @@ export function PortfolioView({ onOpenCompany }: { onOpenCompany: (id: string) =
           </form>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function PortfolioAnalytics() {
+  const { data, isLoading } = useQuery({
+    queryKey: ["portfolio-analytics"],
+    queryFn: async () => {
+      const res = await fetch("/api/portfolio/analytics");
+      return res.json() as Promise<{
+        analytics: {
+          totalValue: number;
+          totalCost: number;
+          totalGain: number;
+          totalGainPct: number;
+          portfolioBeta: number;
+          sharpeRatio: number;
+          annualizedReturn: number;
+          annualizedVolatility: number;
+          diversificationScore: number;
+          sectorAllocation: { sector: string; value: number; weight: number }[];
+          topContributors: { ticker: string; gain: number; gainPct: number }[];
+          topDetractors: { ticker: string; gain: number; gainPct: number }[];
+        } | null;
+      }>;
+    },
+  });
+
+  if (isLoading) return <Skeleton className="h-48" />;
+  if (!data?.analytics) return null;
+
+  const a = data.analytics;
+  return (
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Risk Metrics</CardTitle>
+        </CardHeader>
+        <CardContent className="grid grid-cols-2 gap-4">
+          <div>
+            <div className="text-xs text-muted-foreground">Sharpe Ratio</div>
+            <div className="text-xl font-bold">{a.sharpeRatio.toFixed(2)}</div>
+            <div className="text-xs text-muted-foreground">Annualized, Rf=4.5%</div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">Portfolio Beta</div>
+            <div className="text-xl font-bold">{a.portfolioBeta.toFixed(2)}</div>
+            <div className="text-xs text-muted-foreground">Weighted average</div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">Annual Return</div>
+            <div className={`text-xl font-bold ${a.annualizedReturn >= 0 ? "text-emerald-500" : "text-red-500"}`}>
+              {a.annualizedReturn.toFixed(2)}%
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">Volatility</div>
+            <div className="text-xl font-bold">{a.annualizedVolatility.toFixed(2)}%</div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Diversification & Sectors</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Diversification Score</span>
+              <span className="font-bold">{a.diversificationScore}/100</span>
+            </div>
+            <Progress value={a.diversificationScore} className="mt-1 h-1.5" />
+          </div>
+          <div className="space-y-1">
+            {a.sectorAllocation.map((s) => (
+              <div key={s.sector} className="flex items-center justify-between text-xs">
+                <span>{s.sector}</span>
+                <div className="flex items-center gap-2">
+                  <span className="tabular-nums text-muted-foreground">{s.weight.toFixed(1)}%</span>
+                  <div className="h-1.5 w-20 rounded-full bg-muted">
+                    <div className="h-full rounded-full bg-primary" style={{ width: `${s.weight}%` }} />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Top Contributors</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {a.topContributors.map((c) => (
+            <div key={c.ticker} className="flex items-center justify-between text-sm">
+              <span className="font-mono font-semibold">{c.ticker}</span>
+              <div className="text-right">
+                <span className="tabular-nums text-emerald-500">+${c.gain.toFixed(0)}</span>
+                <span className="ml-2 text-xs text-muted-foreground">{c.gainPct.toFixed(1)}%</span>
+              </div>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Top Detractors</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          {a.topDetractors.map((c) => (
+            <div key={c.ticker} className="flex items-center justify-between text-sm">
+              <span className="font-mono font-semibold">{c.ticker}</span>
+              <div className="text-right">
+                <span className="tabular-nums text-red-500">${c.gain.toFixed(0)}</span>
+                <span className="ml-2 text-xs text-muted-foreground">{c.gainPct.toFixed(1)}%</span>
+              </div>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
     </div>
   );
 }

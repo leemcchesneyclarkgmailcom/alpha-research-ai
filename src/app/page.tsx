@@ -16,6 +16,11 @@ import {
   X,
   Bell,
   Search as SearchIcon,
+  GitCompare,
+  MessageSquare,
+  AlertCircle,
+  Building2,
+  Users,
 } from "lucide-react";
 import { DashboardNav, NavItem, View } from "@/components/dashboard-nav";
 import { ModeToggle } from "@/components/mode-toggle";
@@ -41,6 +46,11 @@ import { MoversView } from "@/components/views/movers";
 import { NewsView } from "@/components/views/news";
 import { AdminView } from "@/components/views/admin";
 import { CompanyDetailView } from "@/components/views/company-detail";
+import { ChatView } from "@/components/views/chat";
+import { CompareView } from "@/components/views/compare";
+import { AlertsView } from "@/components/views/alerts";
+import { SectorsView } from "@/components/views/sectors";
+import { InsidersView } from "@/components/views/insiders";
 import { AuthDialog } from "@/components/auth-dialog";
 import { ProfileDialog } from "@/components/profile-dialog";
 import { CommandSearch } from "@/components/command-search";
@@ -51,10 +61,15 @@ const NAV_ITEMS: NavItem[] = [
   { id: "portfolio", label: "Portfolio", icon: Wallet, group: "research" },
   { id: "ratings", label: "AI Ratings", icon: Sparkles, group: "research" },
   { id: "reports", label: "Research Reports", icon: FileText, group: "research" },
+  { id: "chat", label: "AI Chat Analyst", icon: MessageSquare, group: "research" },
+  { id: "compare", label: "Compare Companies", icon: GitCompare, group: "research" },
   { id: "screener", label: "Stock Screener", icon: Filter, group: "markets" },
   { id: "movers", label: "Market Movers", icon: TrendingUp, group: "markets" },
+  { id: "sectors", label: "Sector Dashboard", icon: Building2, group: "markets" },
   { id: "earnings", label: "Earnings Calendar", icon: CalendarDays, group: "markets" },
   { id: "news", label: "News & Sentiment", icon: Newspaper, group: "markets" },
+  { id: "insiders", label: "Insider Transactions", icon: Users, group: "markets" },
+  { id: "alerts", label: "Price Alerts", icon: AlertCircle, group: "account" },
   { id: "admin", label: "Admin / Jobs", icon: Settings, group: "account" },
 ];
 
@@ -262,6 +277,16 @@ function ViewRouter({
       return <MoversView onOpenCompany={onOpenCompany} />;
     case "news":
       return <NewsView onOpenCompany={onOpenCompany} />;
+    case "chat":
+      return <ChatView onOpenCompany={onOpenCompany} />;
+    case "compare":
+      return <CompareView onOpenCompany={onOpenCompany} />;
+    case "alerts":
+      return <AlertsView onOpenCompany={onOpenCompany} />;
+    case "sectors":
+      return <SectorsView onOpenCompany={onOpenCompany} />;
+    case "insiders":
+      return <InsidersView onOpenCompany={onOpenCompany} />;
     case "admin":
       return <AdminView />;
     case "company":

@@ -14,7 +14,12 @@ export type View =
   | "movers"
   | "news"
   | "admin"
-  | "company";
+  | "company"
+  | "chat"
+  | "compare"
+  | "alerts"
+  | "sectors"
+  | "insiders";
 
 interface NavItem {
   id: View;
